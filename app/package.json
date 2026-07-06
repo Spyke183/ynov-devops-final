@@ -1,0 +1,57 @@
+{
+  "name": "@spyke183/ci-cd-ynov",
+  "version": "0.3.0",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "homepage": "https://Spyke183.github.io/ci-cd-ynov",
+  "dependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^13.5.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --setupFiles=./.jest/setEnvVars.js --coverage --collectCoverageFrom=src/**/*.{js,jsx} --collectCoverageFrom=!src/reportWebVitals.js --collectCoverageFrom=!src/index.js --watchAll=false",
+    "eject": "react-scripts eject",
+    "cypress": "cypress open",
+    "cypress:run": "cypress run",
+    "jsdoc": "jsdoc -R ./README.md -c ./jsdoc.config.json -r -d ./public/docs",
+    "build-npm": "export NODE_ENV=production && rm -rf dist && mkdir dist && npx babel src --out-dir dist --copy-files"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.29.7",
+    "@babel/core": "^7.29.7",
+    "@babel/plugin-transform-react-jsx": "^7.29.7",
+    "cypress": "^15.17.0",
+    "gh-pages": "^6.3.0",
+    "jsdoc": "^4.0.5"
+  }
+}
