@@ -2,5 +2,5 @@ Projet Final DevOps - Zero Touch
 Groupe : Ugo AMESLANT, Thomas BARRAULT, Torea TINORUA
 
 Depot GitHub : https://github.com/Spyke183/ynov-devops-final
-Application  : http://<IP_EC2_APPLICATIVE>
-Registre     : https://<IP_EC2_REGISTRE>
+Application  : http://35.180.227.128
+Registre     : https://15.188.63.63
