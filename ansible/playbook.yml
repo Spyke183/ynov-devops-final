@@ -1,0 +1,78 @@
+---
+- name: Deploiement de l'application
+  hosts: app
+  become: true
+  vars:
+    app_dir: /home/ubuntu/app
+
+  tasks:
+    - name: Mettre a jour apt
+      ansible.builtin.apt:
+        update_cache: true
+      register: apt_update
+      retries: 5
+      delay: 10
+      until: apt_update is succeeded
+
+    - name: Installer Docker
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+
+    - name: Activer Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Autoriser le registre prive (certificat auto-signe)
+      ansible.builtin.template:
+        src: daemon.json.j2
+        dest: /etc/docker/daemon.json
+      notify: Redemarrer Docker
+
+    - name: Appliquer la conf Docker
+      ansible.builtin.meta: flush_handlers
+
+    - name: Creer le dossier de l'application
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Login au registre prive
+      ansible.builtin.shell: >
+        echo "{{ registry_password }}" |
+        docker login {{ registry_host }} -u "{{ registry_user }}" --password-stdin
+      no_log: true
+
+    - name: Copier le docker-compose
+      ansible.builtin.copy:
+        src: ../app/docker-compose.prod.yml
+        dest: "{{ app_dir }}/docker-compose.yml"
+
+    - name: Generer le fichier .env
+      ansible.builtin.template:
+        src: env.j2
+        dest: "{{ app_dir }}/.env"
+        mode: "0600"
+      no_log: true
+
+    - name: Tirer les images
+      ansible.builtin.command: docker compose pull
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Lancer la stack
+      ansible.builtin.command: docker compose up -d --remove-orphans
+      args:
+        chdir: "{{ app_dir }}"
+
+  handlers:
+    - name: Redemarrer Docker
+      ansible.builtin.service:
+        name: docker
+        state: restarted
