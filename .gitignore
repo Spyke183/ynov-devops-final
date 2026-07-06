@@ -1,0 +1,13 @@
+node_modules/
+build/
+coverage/
+.env
+*.pem
+key.pem
+inventory.ini
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.retry
+.DS_Store
