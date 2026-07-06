@@ -1,0 +1,75 @@
+---
+- name: Deploiement du registre Docker prive
+  hosts: registry
+  become: true
+  vars:
+    registry_user: admin
+    project_dir: /home/ubuntu/registry-stack
+
+  tasks:
+    - name: Mettre a jour apt
+      ansible.builtin.apt:
+        update_cache: true
+      register: apt_update
+      retries: 5
+      delay: 10
+      until: apt_update is succeeded
+
+    - name: Installer Docker et apache2-utils
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - apache2-utils
+        state: present
+
+    - name: Activer Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Creer l'arborescence du registre
+      ansible.builtin.file:
+        path: "{{ project_dir }}/{{ item }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+      loop:
+        - auth
+        - ssl
+        - conf
+        - data
+
+    - name: Generer le certificat SSL auto-signe
+      ansible.builtin.command: >
+        openssl req -newkey rsa:4096 -nodes -sha256
+        -keyout {{ project_dir }}/ssl/registry.key
+        -x509 -days 365
+        -out {{ project_dir }}/ssl/registry.crt
+        -subj "/CN={{ registry_public_ip }}"
+      args:
+        creates: "{{ project_dir }}/ssl/registry.crt"
+
+    - name: Generer le fichier htpasswd
+      ansible.builtin.shell: >
+        htpasswd -Bbc {{ project_dir }}/auth/registry.password
+        "{{ registry_user }}" "{{ registry_password }}"
+      args:
+        creates: "{{ project_dir }}/auth/registry.password"
+      no_log: true
+
+    - name: Deposer la conf nginx
+      ansible.builtin.template:
+        src: nginx-registry.conf.j2
+        dest: "{{ project_dir }}/conf/registry.conf"
+
+    - name: Deposer le docker-compose
+      ansible.builtin.template:
+        src: docker-compose.registry.yml.j2
+        dest: "{{ project_dir }}/docker-compose.yml"
+
+    - name: Lancer la stack du registre
+      ansible.builtin.command: docker compose up -d
+      args:
+        chdir: "{{ project_dir }}"
