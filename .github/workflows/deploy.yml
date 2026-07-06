@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_DEFAULT_REGION: eu-west-3
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag d'image
+        run: echo "TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      - name: Installer Ansible
+        run: sudo apt-get update -qq && sudo apt-get install -y ansible netcat-openbsd
+
+      - name: Autoriser le registre prive sur le runner
+        run: |
+          echo '{ "insecure-registries": ["${{ secrets.REGISTRY_HOST }}"] }' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Login au registre prive
+        run: echo "${{ secrets.REGISTRY_PASSWORD }}" | docker login "${{ secrets.REGISTRY_HOST }}" -u "${{ secrets.REGISTRY_USER }}" --password-stdin
+
+      - name: Build et push des images
+        run: |
+          REG="${{ secrets.REGISTRY_HOST }}"
+          docker build -f app/Dockerfile.front  -t "$REG/ci-cd-ynov-frontend:$TAG" app
+          docker build -f app/server/Dockerfile -t "$REG/ci-cd-ynov-api:$TAG"      app/server
+          docker build -f app/Dockerfile.db     -t "$REG/ci-cd-ynov-db:$TAG"       app
+          docker push "$REG/ci-cd-ynov-frontend:$TAG"
+          docker push "$REG/ci-cd-ynov-api:$TAG"
+          docker push "$REG/ci-cd-ynov-db:$TAG"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Terraform apply
+        working-directory: infra
+        run: terraform apply -auto-approve
+
+      - name: Recuperer l'IP et la cle, generer l'inventaire
+        working-directory: infra
+        run: |
+          APP_IP=$(terraform output -raw public_ip)
+          echo "APP_IP=$APP_IP" >> "$GITHUB_ENV"
+          terraform output -raw ssh_private_key > "$GITHUB_WORKSPACE/key.pem"
+          chmod 600 "$GITHUB_WORKSPACE/key.pem"
+          printf '[app]\n%s ansible_user=ubuntu ansible_ssh_private_key_file=%s/key.pem\n' "$APP_IP" "$GITHUB_WORKSPACE" > "$GITHUB_WORKSPACE/inventory.ini"
+
+      - name: Attendre le SSH
+        run: |
+          for i in $(seq 1 30); do
+            nc -z -w5 "$APP_IP" 22 && exit 0
+            echo "Attente du SSH ($i/30)"; sleep 10
+          done
+          exit 1
+
+      - name: Deployer avec Ansible
+        env:
+          ANSIBLE_CONFIG: ${{ github.workspace }}/ansible/ansible.cfg
+        run: |
+          ansible-playbook -i inventory.ini ansible/playbook.yml \
+            -e "registry_host=${{ secrets.REGISTRY_HOST }}" \
+            -e "registry_user=${{ secrets.REGISTRY_USER }}" \
+            -e "registry_password=${{ secrets.REGISTRY_PASSWORD }}" \
+            -e "image_tag=$TAG" \
+            -e "mysql_root_password=${{ secrets.MYSQL_ROOT_PASSWORD }}" \
+            -e "admin_email=${{ secrets.ADMIN_EMAIL }}" \
+            -e "admin_password=${{ secrets.ADMIN_PASSWORD }}"
+
+      - name: Verifier le front et l'API
+        run: |
+          for i in $(seq 1 20); do
+            front=$(curl -s -o /dev/null -w "%{http_code}" "http://$APP_IP/" || true)
+            api=$(curl -s -o /dev/null -w "%{http_code}" "http://$APP_IP/api/users" || true)
+            echo "essai $i : front=$front api=$api"
+            if [ "$front" = "200" ] && [ "$api" = "200" ]; then
+              echo "Application en ligne : http://$APP_IP"
+              exit 0
+            fi
+            sleep 15
+          done
+          exit 1
