@@ -27,6 +27,16 @@
         state: started
         enabled: true
 
+    - name: Creer un swap de 2 Go (evite l'OOM sur t3.micro)
+      ansible.builtin.shell: |
+        fallocate -l 2G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+      args:
+        creates: /swapfile
+
     - name: Autoriser le registre prive (certificat auto-signe)
       ansible.builtin.template:
         src: daemon.json.j2
