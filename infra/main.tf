@@ -31,13 +31,13 @@ resource "tls_private_key" "app" {
 }
 
 resource "aws_key_pair" "app" {
-  key_name   = "${var.name}-key"
-  public_key = tls_private_key.app.public_key_openssh
+  key_name_prefix = "${var.name}-"
+  public_key      = tls_private_key.app.public_key_openssh
 }
 
 # 80 public (front + API proxifiee), 22 pour Ansible. Le reste reste interne.
 resource "aws_security_group" "app" {
-  name        = "${var.name}-sg"
+  name_prefix = "${var.name}-"
   description = "Application : HTTP public et SSH"
 
   ingress {
